@@ -1,0 +1,20 @@
+{
+  "name": "advent-of-code-2019",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@babel/core": "^7.7.4",
+    "@babel/node": "^7.7.4",
+    "@babel/preset-env": "^7.7.4",
+    "babel-jest": "^24.9.0"
+  },
+  "dependencies": {
+    "jest": "^24.9.0"
+  }
+}
