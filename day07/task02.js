@@ -1,24 +1,47 @@
 export default (programStr) =>
 {
     const program = programStr.trim().split(',').map(s => Number.parseInt(s));
-    const allPhaseSettings = [0, 1, 2, 3, 4];
-    // const allPhaseSettings = [5, 6, 7, 8, 9];
+    const allPhaseSettings = [5, 6, 7, 9, 8];
     let outputCombinations = [];
 
     for (let phaseSettings of getPermutations(allPhaseSettings))
     {
-        let input = 0;
-        let output;
-        const computers = phaseSettings.map(setting => intcodeComputer(program, setting));
+        const computers = phaseSettings.map((setting, index) => {
+            const computer = intcodeComputer([...program], setting)();
+            computer.setting = setting;
+            computer.index = index;
+            computer.next();
+            return computer;
+        });
 
-        for (let i = 0; i < computers.length; i++)
+        let latestOutput;
+        let input = 0;
+        let index = 0;
+
+        loop1: while (true)
         {
-            const computer = computers[i];
-            output = computer(() => input);
-            input = output;
+            const computer = computers[index];
+
+            loop2: while (true) {
+                const obj = computer.next(input);
+                const {opcode, output} = obj.value || {};
+
+                if (opcode === 4)
+                {
+                    input = output;
+                    latestOutput = output;
+                    break loop2;
+                }
+
+                if (obj.done)
+                {
+                    break loop1;
+                }
+            }
+            index = (index + 1) % computers.length;
         }
 
-        outputCombinations = [...outputCombinations, [output, phaseSettings]];
+        outputCombinations = [...outputCombinations, [latestOutput, phaseSettings]];
     }
 
     outputCombinations.sort((a, b) => b[0] - a[0]);
@@ -48,12 +71,12 @@ const getPermutations = (array) =>
 
 const intcodeComputer = (program, phaseSetting) =>
 {
-    let output = [];
     let pointer = 0;
     let inputCounter = 0;
 
-    return (getInput) =>
+    return function* ()
     {
+        yield;
         for (;;)
         {
             const command = extractCommand(program[pointer]);
@@ -80,7 +103,8 @@ const intcodeComputer = (program, phaseSetting) =>
             if (opcode === 3)
             {
                 const position = program[pointer + 1];
-                program[position] = inputCounter === 0 ? phaseSetting : getInput();
+                const input = inputCounter === 0 ? phaseSetting : yield;
+                program[position] = input;
                 inputCounter = inputCounter + 1;
                 pointer = pointer + 2;
                 continue;
@@ -89,7 +113,7 @@ const intcodeComputer = (program, phaseSetting) =>
             if (opcode === 4)
             {
                 const value = mode1 ? program[pointer + 1] : program[program[pointer + 1]];
-                output = [...output, value];
+                yield {opcode: 4, output: value};
                 pointer = pointer + 2;
                 continue;
             }
@@ -127,10 +151,7 @@ const intcodeComputer = (program, phaseSetting) =>
 
             break;
         }
-
-        return output[output.length - 1];
     }
-
 }
 
 const extractCommand = (number) =>
