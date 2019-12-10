@@ -1,179 +1,154 @@
-export default (programStr, input) =>
+export default (mapStr) =>
 {
-    const program = programStr.trim().split(',').map(s => Number.parseInt(s));
+    const map = mapStr.trim().split(/\s+/).map((str) => str.split(''));
+    const flattenedMap = map.reduce((memo, arr, y) => [...memo, ...arr.map((value, x) => ({x, y, value}))], []);
+    const asteroids = flattenedMap.filter(l => l.value === "#");
+    const width = map[0].length;
+    const height = map.length;
+    let visibleAsteroidCounters = [];
 
-    const computer = intcodeComputer([...program])();
-    computer.next();
+    for (let {x:fromX, y:fromY} of asteroids)
+    {
+        let visibleAsteroidCounter = {x: fromX, y: fromY, count: 0, visibles: []};
 
-    // const input = 1;
-    let outputArray = [];
-
-    while (true) {
-        const obj = computer.next(input);
-        const {opcode, output} = obj.value || {};
-
-        if (opcode === 4)
+        for (let {x :toX, y :toY} of asteroids)
         {
-            // input = output;
-            // console.log(output);
-            outputArray = [...outputArray, output];
+            if (fromX === toX && fromY === toY)
+            {
+                continue;
+            }
+            const vX = toX - fromX;
+            const vY = toY - fromY;
+            // const distance = Math.sqrt(vX * vX + vY * vY);
+            const isEitherFromOrTo = a => (a.x === toX && a.y === toY) || (a.x === fromX && a.y === fromY);
+            const restAsteroids = asteroids.filter(a => !isEitherFromOrTo(a));
+            let visible = true;
+            // console.log(`x:${fromX} y:${fromY} -> x:${toX} y:${toY}`);
+            // console.log(restAsteroids);
+
+            if (vX === 0) {
+                const step = Math.sign(vY);
+                const isBeteen = between(fromY, toY);
+                for (let y = fromY + step; isBeteen(y); y = y + step)
+                {
+                    // fromX === 4 && fromY === 2 && console.log(y);
+                    const blockage = restAsteroids.find(a => fromX === a.x && y === a.y);
+                    // fromX === 4 && fromY === 2 && console.log(blockage);
+                    if (blockage) {
+                        visible = false;
+                        break;
+                    }
+                }
+            } else {
+                const slope = vY / vX;
+                const yIntercept = fromY - (slope * fromX);
+                const step = Math.sign(vX);
+                const isBeteen = between(fromX, toX);
+                for (let x = fromX + step; isBeteen(x); x = x + step)
+                {
+                    let y = slope * x + yIntercept;
+                    if (Math.floor((y * 100) % 100) === 99 || Math.floor((y * 100) % 100) === 0)
+                    {
+                        y = Math.round(y);
+                    }
+                    const blockage = restAsteroids.find(a => x === a.x && y === a.y);
+                    if (blockage) {
+                        visible = false;
+                        break;
+                    }
+                }
+            }
+
+            if (visible)
+            {
+                visibleAsteroidCounter.count++;
+                visibleAsteroidCounter.visibles = [...visibleAsteroidCounter.visibles, {x :toX, y :toY}];
+            }
         }
 
-        if (obj.done)
+        visibleAsteroidCounters = [...visibleAsteroidCounters, visibleAsteroidCounter];
+    }
+
+    // const counterDisplay = map.reduce((memo1, arr, y) => memo1 + '\n' + arr.reduce((memo2, value, x) => {
+    //     const asteroud = visibleAsteroidCounters.find(i => i.x === x && i.y === y);
+    //     return memo2 + (asteroud ? String(asteroud.count) : value);
+    // }, ''), '');
+    // console.log(counterDisplay);
+    //
+    const aCounter = visibleAsteroidCounters.find(a => a.x === 11 && a.y === 13);
+    if (aCounter) {
+        const counterDisplay2 = map.reduce((memo1, arr, y) => memo1 + '\n' + arr.reduce((memo2, value, x) => {
+            let displayedValue = value;
+            if (aCounter.x === x && aCounter.y === y) displayedValue = '¶';//aCounter.count;
+            if (aCounter.visibles.find(i => i.x === x && i.y === y)) displayedValue = 'o';
+            return memo2 + displayedValue;
+        }, ''), '');
+        // console.log(aCounter);
+        // console.log(counterDisplay2);
+    }
+
+    visibleAsteroidCounters.sort((a, b) => b.count - a.count);
+
+    const {x: stationX, y: stationY} = visibleAsteroidCounters[0];
+
+    // console.log(stationX, stationY);
+
+    const asteroidsWithAngles = asteroids.filter(a => a.x !== stationX || a.y !== stationY).map(a => {
+        const v1 = {x: 0, y: -1};
+        const v2 = {x: a.x - stationX, y: a.y - stationY};
+        const dot = v1.x * v2.x  + v1.y * v2.y;
+        const det = v1.x * v2.y  - v1.y * v2.x;
+        let angle = Math.atan2(det, dot) * 180 / Math.PI;
+        if (angle < 0) angle = 180 + Math.abs(180 + angle);
+        return {...a, angle};
+    });
+
+    // console.log(asteroids.filter(a => a.x !== stationX || a.y !== stationY));
+
+    asteroidsWithAngles.sort((a, b) => {
+        const aDiff = a.angle - b.angle;
+        if (aDiff) return aDiff;
+        const aDis = Math.sqrt(Math.pow(a.x - stationX, 2) + Math.pow(a.y - stationY, 2));
+        const bDis = Math.sqrt(Math.pow(b.x - stationX, 2) + Math.pow(b.y - stationY, 2));
+        return aDis - bDis;
+    });
+
+    const sortedAsteroids = asteroidsWithAngles.reduce((memo, a) => {
+        if (memo.length === 0) return [[a]];
+        if (memo[memo.length - 1][0].angle === a.angle) {
+            memo[memo.length - 1] = [...memo[memo.length - 1], a];
+            return memo;
+        } else {
+            return [...memo, [a]];
+        }
+    }, []);
+
+    // console.log(sortedAsteroids);
+
+    let destroyedAsteroids = [];
+    let destroyedAsteroid;
+    let prevAngle;
+    while (sortedAsteroids.length)
+    {
+        const arr = sortedAsteroids.shift();
+
+        destroyedAsteroids = [...destroyedAsteroids, arr.shift()];
+
+        if (arr.length !== 0)
         {
-            break;
+            sortedAsteroids.push(arr);
         }
     }
 
-    return outputArray.length <= 1 ? outputArray[0] : outputArray;
+    // console.log(destroyedAsteroids);
+
+    return destroyedAsteroids[199];
 };
 
-const intcodeComputer = (program) =>
-{
-    let pointer = 0;
-    let relativeBase = 0;
-
-    return function* ()
-    {
-        yield;
-        for (;;)
-        {
-            const command = extractCommand(program[pointer]);
-            const opcode = command[0];
-            const mode1 = command[1];
-            const mode2 = command[2];
-            const mode3 = command[3];
-
-            if (opcode === 99)
-            {
-                break;
-            }
-
-            if (opcode === 1 || opcode === 2)
-            {
-                const value1 = getValueWithMode(program, mode1, pointer + 1, relativeBase);
-                const value2 = getValueWithMode(program, mode2, pointer + 2, relativeBase);
-                const position = getValueWithModeForWrite(program, mode3, pointer + 3, relativeBase);
-                program[position] = opcode === 1 ? value1 + value2 : value1 * value2;
-                pointer = pointer + 4;
-                continue;
-            }
-
-            if (opcode === 3)
-            {
-                const position = getValueWithModeForWrite(program, mode1, pointer + 1, relativeBase);
-                const input = yield;
-                program[position] = input;
-                pointer = pointer + 2;
-                continue;
-            }
-
-            if (opcode === 4)
-            {
-                const value = getValueWithMode(program, mode1, pointer + 1, relativeBase);
-                yield {opcode: 4, output: value};
-                pointer = pointer + 2;
-                continue;
-            }
-
-            if (opcode === 5 || opcode === 6)
-            {
-                const value1 = getValueWithMode(program, mode1, pointer + 1, relativeBase);
-                const value2 = getValueWithMode(program, mode2, pointer + 2, relativeBase);
-                if (opcode === 5 && value1) pointer = value2;
-                else if (opcode === 6 && !value1) pointer = value2;
-                else pointer = pointer + 3;
-                continue;
-            }
-
-            if (opcode === 7)
-            {
-                const value1 = getValueWithMode(program, mode1, pointer + 1, relativeBase);
-                const value2 = getValueWithMode(program, mode2, pointer + 2, relativeBase);
-                const position = getValueWithModeForWrite(program, mode3, pointer + 3, relativeBase);
-                program[position] = value1 < value2 ? 1 : 0;
-                pointer = pointer + 4;
-                continue;
-            }
-
-            if (opcode === 8)
-            {
-                const value1 = getValueWithMode(program, mode1, pointer + 1, relativeBase);
-                const value2 = getValueWithMode(program, mode2, pointer + 2, relativeBase);
-                const position = getValueWithModeForWrite(program, mode3, pointer + 3, relativeBase);
-                program[position] = value1 === value2 ? 1 : 0;
-                pointer = pointer + 4;
-                continue;
-            }
-
-            if (opcode === 9)
-            {
-                const value = getValueWithMode(program, mode1, pointer + 1, relativeBase);
-                relativeBase = relativeBase + value;
-                pointer = pointer + 2;
-                continue;
-            }
-
-            break;
-        }
+const between = (a, b, inclusive = false) => {
+    const min = Math.min(a, b);
+    const max = Math.max(a, b);
+    return value => {
+        return inclusive ? value >= min && value <= max : value > min && value < max;
     }
 }
-
-const getValueWithMode = (program, mode, position, relativeBase) =>
-{
-    let value;
-    switch (mode) {
-        case 0:
-            value = program[program[position]];
-            break;
-        case 1:
-            value = program[position];
-            break;
-        case 2:
-            value = program[relativeBase + program[position]];
-            break;
-        default:
-    }
-    return typeof value === 'undefined' ? 0 : value;
-}
-
-const getValueWithModeForWrite = (program, mode, position, relativeBase) =>
-{
-    let value;
-    switch (mode) {
-        case 0:
-            // value = program[program[position]];
-            // break;
-        case 1:
-            value = program[position];
-            break;
-        case 2:
-            value = relativeBase + program[position];
-            break;
-        default:
-    }
-    return typeof value === 'undefined' ? 0 : value;
-}
-
-const extractCommand = (number) =>
-{
-    let values = [];
-
-    while (number > 0)
-    {
-        values = [...values, number % 10];
-        number = Math.floor(number / 10);
-    }
-
-    values = [
-        values[0] + (values[1] || 0) * 10,
-        ...values.slice(2)
-    ];
-
-    while (values.length < 4)
-    {
-        values = [...values, 0];
-    }
-
-    return values;
-};
