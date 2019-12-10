@@ -80,7 +80,6 @@ const intcodeComputer = (program) =>
             {
                 const value1 = getValueWithMode(program, mode1, pointer + 1, relativeBase);
                 const value2 = getValueWithMode(program, mode2, pointer + 2, relativeBase);
-                const position = program[pointer + 2];
                 if (opcode === 5 && value1) pointer = value2;
                 else if (opcode === 6 && !value1) pointer = value2;
                 else pointer = pointer + 3;

@@ -1,78 +1,37 @@
-export default (programStr) =>
+export default (programStr, input) =>
 {
     const program = programStr.trim().split(',').map(s => Number.parseInt(s));
-    const allPhaseSettings = [5, 6, 7, 9, 8];
-    let outputCombinations = [];
 
-    for (let phaseSettings of getPermutations(allPhaseSettings))
-    {
-        const computers = phaseSettings.map((setting, index) => {
-            const computer = intcodeComputer([...program], setting)();
-            computer.setting = setting;
-            computer.index = index;
-            computer.next();
-            return computer;
-        });
+    const computer = intcodeComputer([...program])();
+    computer.next();
 
-        let latestOutput;
-        let input = 0;
-        let index = 0;
+    // const input = 1;
+    let outputArray = [];
 
-        loop1: while (true)
+    while (true) {
+        const obj = computer.next(input);
+        const {opcode, output} = obj.value || {};
+
+        if (opcode === 4)
         {
-            const computer = computers[index];
-
-            loop2: while (true) {
-                const obj = computer.next(input);
-                const {opcode, output} = obj.value || {};
-
-                if (opcode === 4)
-                {
-                    input = output;
-                    latestOutput = output;
-                    break loop2;
-                }
-
-                if (obj.done)
-                {
-                    break loop1;
-                }
-            }
-            index = (index + 1) % computers.length;
+            // input = output;
+            // console.log(output);
+            outputArray = [...outputArray, output];
         }
 
-        outputCombinations = [...outputCombinations, [latestOutput, phaseSettings]];
-    }
-
-    outputCombinations.sort((a, b) => b[0] - a[0]);
-
-    // console.log(outputCombinations.slice(0, 10));
-
-    return outputCombinations[0];
-};
-
-const getPermutations = (array) =>
-{
-    if (array.length < 2) return false;
-    if (array.length === 2) return [ [array[0], array[1]], [array[1], array[0]] ];
-
-    let permutations = [];
-    for (let i = 0; i < array.length; i++)
-    {
-        const rest = [...array.slice(0, i), ...array.slice(i + 1)];
-        const restPermutations = getPermutations(rest);
-        if (restPermutations) for (let restPermutation of restPermutations)
+        if (obj.done)
         {
-            permutations = [...permutations, [array[i], ...restPermutation]];
+            break;
         }
     }
-    return permutations;
+
+    return outputArray.length <= 1 ? outputArray[0] : outputArray;
 };
 
-const intcodeComputer = (program, phaseSetting) =>
+const intcodeComputer = (program) =>
 {
     let pointer = 0;
-    let inputCounter = 0;
+    let relativeBase = 0;
 
     return function* ()
     {
@@ -92,9 +51,9 @@ const intcodeComputer = (program, phaseSetting) =>
 
             if (opcode === 1 || opcode === 2)
             {
-                const value1 = mode1 ? program[pointer + 1] : program[program[pointer + 1]];
-                const value2 = mode2 ? program[pointer + 2] : program[program[pointer + 2]];
-                const position = program[pointer + 3];
+                const value1 = getValueWithMode(program, mode1, pointer + 1, relativeBase);
+                const value2 = getValueWithMode(program, mode2, pointer + 2, relativeBase);
+                const position = getValueWithModeForWrite(program, mode3, pointer + 3, relativeBase);
                 program[position] = opcode === 1 ? value1 + value2 : value1 * value2;
                 pointer = pointer + 4;
                 continue;
@@ -102,17 +61,16 @@ const intcodeComputer = (program, phaseSetting) =>
 
             if (opcode === 3)
             {
-                const position = program[pointer + 1];
-                const input = inputCounter === 0 ? phaseSetting : yield;
+                const position = getValueWithModeForWrite(program, mode1, pointer + 1, relativeBase);
+                const input = yield;
                 program[position] = input;
-                inputCounter = inputCounter + 1;
                 pointer = pointer + 2;
                 continue;
             }
 
             if (opcode === 4)
             {
-                const value = mode1 ? program[pointer + 1] : program[program[pointer + 1]];
+                const value = getValueWithMode(program, mode1, pointer + 1, relativeBase);
                 yield {opcode: 4, output: value};
                 pointer = pointer + 2;
                 continue;
@@ -120,9 +78,8 @@ const intcodeComputer = (program, phaseSetting) =>
 
             if (opcode === 5 || opcode === 6)
             {
-                const value1 = mode1 ? program[pointer + 1] : program[program[pointer + 1]];
-                const value2 = mode2 ? program[pointer + 2] : program[program[pointer + 2]];
-                const position = program[pointer + 2];
+                const value1 = getValueWithMode(program, mode1, pointer + 1, relativeBase);
+                const value2 = getValueWithMode(program, mode2, pointer + 2, relativeBase);
                 if (opcode === 5 && value1) pointer = value2;
                 else if (opcode === 6 && !value1) pointer = value2;
                 else pointer = pointer + 3;
@@ -131,9 +88,9 @@ const intcodeComputer = (program, phaseSetting) =>
 
             if (opcode === 7)
             {
-                const value1 = mode1 ? program[pointer + 1] : program[program[pointer + 1]];
-                const value2 = mode2 ? program[pointer + 2] : program[program[pointer + 2]];
-                const position = program[pointer + 3];
+                const value1 = getValueWithMode(program, mode1, pointer + 1, relativeBase);
+                const value2 = getValueWithMode(program, mode2, pointer + 2, relativeBase);
+                const position = getValueWithModeForWrite(program, mode3, pointer + 3, relativeBase);
                 program[position] = value1 < value2 ? 1 : 0;
                 pointer = pointer + 4;
                 continue;
@@ -141,17 +98,61 @@ const intcodeComputer = (program, phaseSetting) =>
 
             if (opcode === 8)
             {
-                const value1 = mode1 ? program[pointer + 1] : program[program[pointer + 1]];
-                const value2 = mode2 ? program[pointer + 2] : program[program[pointer + 2]];
-                const position = program[pointer + 3];
+                const value1 = getValueWithMode(program, mode1, pointer + 1, relativeBase);
+                const value2 = getValueWithMode(program, mode2, pointer + 2, relativeBase);
+                const position = getValueWithModeForWrite(program, mode3, pointer + 3, relativeBase);
                 program[position] = value1 === value2 ? 1 : 0;
                 pointer = pointer + 4;
+                continue;
+            }
+
+            if (opcode === 9)
+            {
+                const value = getValueWithMode(program, mode1, pointer + 1, relativeBase);
+                relativeBase = relativeBase + value;
+                pointer = pointer + 2;
                 continue;
             }
 
             break;
         }
     }
+}
+
+const getValueWithMode = (program, mode, position, relativeBase) =>
+{
+    let value;
+    switch (mode) {
+        case 0:
+            value = program[program[position]];
+            break;
+        case 1:
+            value = program[position];
+            break;
+        case 2:
+            value = program[relativeBase + program[position]];
+            break;
+        default:
+    }
+    return typeof value === 'undefined' ? 0 : value;
+}
+
+const getValueWithModeForWrite = (program, mode, position, relativeBase) =>
+{
+    let value;
+    switch (mode) {
+        case 0:
+            // value = program[program[position]];
+            // break;
+        case 1:
+            value = program[position];
+            break;
+        case 2:
+            value = relativeBase + program[position];
+            break;
+        default:
+    }
+    return typeof value === 'undefined' ? 0 : value;
 }
 
 const extractCommand = (number) =>
